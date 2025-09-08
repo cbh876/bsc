@@ -1,0 +1,26 @@
+cargo:rustc-link-arg=-Wl,-exported_symbol,__revmc_builtin_*
+OUT_DIR = Some(/Users/constbh/gocode/bsc/aot_out/wbnb/target/release/build/evmwrap-3fac6a9259dd20d0/out)
+TARGET = Some(aarch64-apple-darwin)
+HOST = Some(aarch64-apple-darwin)
+cargo:rerun-if-env-changed=AR_aarch64-apple-darwin
+AR_aarch64-apple-darwin = None
+cargo:rerun-if-env-changed=AR_aarch64_apple_darwin
+AR_aarch64_apple_darwin = None
+cargo:rerun-if-env-changed=HOST_AR
+HOST_AR = None
+cargo:rerun-if-env-changed=AR
+AR = None
+cargo:rerun-if-env-changed=ARFLAGS
+ARFLAGS = None
+cargo:rerun-if-env-changed=HOST_ARFLAGS
+HOST_ARFLAGS = None
+cargo:rerun-if-env-changed=ARFLAGS_aarch64_apple_darwin
+ARFLAGS_aarch64_apple_darwin = None
+cargo:rerun-if-env-changed=ARFLAGS_aarch64-apple-darwin
+ARFLAGS_aarch64-apple-darwin = None
+cargo:rerun-if-env-changed=CC_ENABLE_DEBUG_OUTPUT
+cargo:rustc-link-lib=static=user_contract
+cargo:rustc-link-search=native=/Users/constbh/gocode/bsc/aot_out/wbnb/target/release/build/evmwrap-3fac6a9259dd20d0/out
+cargo:rustc-link-lib=static=user_contract
+cargo:rustc-link-search=native=/Users/constbh/gocode/bsc/aot_out/wbnb/target/release/build/evmwrap-3fac6a9259dd20d0/out
+cargo:rustc-link-search=native=/Users/constbh/gocode/bsc/aot_out/wbnb/target/release

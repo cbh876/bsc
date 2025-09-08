@@ -1,0 +1,22 @@
+[package]
+name = "evmwrap"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+name = "evmwrap"
+crate-type = ["staticlib"]
+
+[build-dependencies]
+cc = "1.0"
+revmc-build = { path = "/Users/constbh/rustRepo/revmc/crates/revmc-build" }
+
+[dependencies]
+revmc = { path = "/Users/constbh/rustRepo/revmc/crates/revmc", default-features = false, features = ["llvm-prefer-dynamic"] }
+revmc-context = { path = "/Users/constbh/rustRepo/revmc/crates/revmc-context", default-features = false }
+revmc-builtins = { path = "/Users/constbh/rustRepo/revmc/crates/revmc-builtins" }
+revm-interpreter = "15.2"
+revm-primitives = "15.2"
+libc = "0.2"
+
+[workspace]

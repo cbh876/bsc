@@ -35,6 +35,8 @@ type Config struct {
 	ExtraEips               []int // Additional EIPS that are to be enabled
 
 	StatelessSelfValidation bool // Generate execution witnesses and self-check against them (testing purpose)
+
+	EnableWbnbAOT bool // Enables native AOT for WBNB
 }
 
 // ScopeContext contains the things that are per-call, such as stack and memory,
@@ -161,6 +163,20 @@ func NewEVMInterpreter(evm *EVM) *EVMInterpreter {
 // considered a revert-and-consume-all-gas operation except for
 // ErrExecutionReverted which means revert-and-keep-gas-left.
 func (in *EVMInterpreter) Run(contract *Contract, input []byte, readOnly bool) (ret []byte, err error) {
+	if !contract.IsDeployment && in.evm.Config.EnableWbnbAOT {
+		if len(input) >= 4 {
+			// WBNB transfer selector 0xa9059cbb
+			if input[0] == 0xa9 && input[1] == 0x05 && input[2] == 0x9c && input[3] == 0xbb {
+				// Filter only WBNB address
+				if contract.Address() == common.HexToAddress("0xBB4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c") {
+					// Use native AOT with host callbacks
+					if out, err := runWbnbAOT(in, contract, input, contract.Code); err == nil {
+						return out, nil
+					}
+				}
+			}
+		}
+	}
 	// Increment the call depth which is restricted to 1024
 	in.evm.depth++
 	defer func() { in.evm.depth-- }()
@@ -211,38 +227,19 @@ func (in *EVMInterpreter) Run(contract *Contract, input []byte, readOnly bool) (
 	}()
 	contract.Input = input
 
-	if debug {
-		defer func() { // this deferred method handles exit-with-error
-			if err == nil {
-				return
-			}
-			if !logged && in.evm.Config.Tracer.OnOpcode != nil {
-				in.evm.Config.Tracer.OnOpcode(pcCopy, byte(op), gasCopy, cost, callContext, in.returnData, in.evm.depth, VMErrorFromErr(err))
-			}
-			if logged && in.evm.Config.Tracer.OnFault != nil {
-				in.evm.Config.Tracer.OnFault(pcCopy, byte(op), gasCopy, cost, callContext, in.evm.depth, VMErrorFromErr(err))
-			}
-		}()
-	}
-	// The Interpreter main run loop (contextual). This loop runs until either an
-	// explicit STOP, RETURN or SELFDESTRUCT is executed, an error occurred during
-	// the execution of one of the operations or until the done flag is set by the
-	// parent context.
+	// Reuse hasher state
+	hasher := in.hasher
+	hasher.Reset()
+
 	for {
-		if debug {
-			// Capture pre-execution values for tracing.
-			logged, pcCopy, gasCopy = false, pc, contract.Gas
+		if in.evm.Cancelled() {
+			return nil, nil
 		}
 
-		if in.evm.chainRules.IsEIP4762 && !contract.IsDeployment && !contract.IsSystemCall {
-			// if the PC ends up in a new "chunk" of verkleized code, charge the
-			// associated costs.
-			contractAddr := contract.Address()
-			consumed, wanted := in.evm.TxContext.AccessEvents.CodeChunksRangeGas(contractAddr, pc, 1, uint64(len(contract.Code)), false, contract.Gas)
-			contract.UseGas(consumed, in.evm.Config.Tracer, tracing.GasChangeWitnessCodeChunk)
-			if consumed < wanted {
-				return nil, ErrOutOfGas
-			}
+		// Get the next opcode and advance the program counter
+		op = contract.GetOp(pc)
+		if op == STOP {
+			return nil, nil
 		}
 
 		// Get the operation from the jump table and validate the stack to ensure there are
