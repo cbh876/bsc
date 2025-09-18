@@ -206,6 +206,7 @@ func (in *EVMInterpreter) Run(contract *Contract, input []byte, readOnly bool) (
 			Stack:    stack,
 			Contract: contract,
 		}
+
 		// For optimisation reason we're using uint64 as the program counter.
 		// It's theoretically possible to go above 2^64. The YP defines the PC
 		// to be uint256. Practically much less so feasible.
@@ -227,19 +228,39 @@ func (in *EVMInterpreter) Run(contract *Contract, input []byte, readOnly bool) (
 	}()
 	contract.Input = input
 
-	// Reuse hasher state
-	hasher := in.hasher
-	hasher.Reset()
+	if debug {
+		defer func() { // this deferred method handles exit-with-error
+			if err == nil {
+				return
+			}
+			if !logged && in.evm.Config.Tracer.OnOpcode != nil {
+				in.evm.Config.Tracer.OnOpcode(pcCopy, byte(op), gasCopy, cost, callContext, in.returnData, in.evm.depth, VMErrorFromErr(err))
+			}
+			if logged && in.evm.Config.Tracer.OnFault != nil {
+				in.evm.Config.Tracer.OnFault(pcCopy, byte(op), gasCopy, cost, callContext, in.evm.depth, VMErrorFromErr(err))
+			}
+		}()
+	}
+	// The Interpreter main run loop (contextual). This loop runs until either an
+	// explicit STOP, RETURN or SELFDESTRUCT is executed, an error occurred during
+	// the execution of one of the operations or until the done flag is set by the
+	// parent context.
 
 	for {
-		if in.evm.Cancelled() {
-			return nil, nil
+		if debug {
+			// Capture pre-execution values for tracing.
+			logged, pcCopy, gasCopy = false, pc, contract.Gas
 		}
 
-		// Get the next opcode and advance the program counter
-		op = contract.GetOp(pc)
-		if op == STOP {
-			return nil, nil
+		if in.evm.chainRules.IsEIP4762 && !contract.IsDeployment && !contract.IsSystemCall {
+			// if the PC ends up in a new "chunk" of verkleized code, charge the
+			// associated costs.
+			contractAddr := contract.Address()
+			consumed, wanted := in.evm.TxContext.AccessEvents.CodeChunksRangeGas(contractAddr, pc, 1, uint64(len(contract.Code)), false, contract.Gas)
+			contract.UseGas(consumed, in.evm.Config.Tracer, tracing.GasChangeWitnessCodeChunk)
+			if consumed < wanted {
+				return nil, ErrOutOfGas
+			}
 		}
 
 		// Get the operation from the jump table and validate the stack to ensure there are
